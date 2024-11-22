@@ -5,8 +5,8 @@
     "task_type": "multiclass",
     "n_num_features": 54,
     "n_cat_features": 0,
-    "train_size": 53588,
-    "val_size": 13398,
-    "test_size": 16747,
+    "train_size": 52333,
+    "val_size": 13973,
+    "test_size": 17427,
     "n_classes": 4
 }
