@@ -1,0 +1,30 @@
+seed = 0
+n_clusters = 20
+eplison = 0.1
+max_iter = 200
+weight_ = 0.5
+
+[data]
+normalization = "quantile"
+path = "data/helena"
+
+[model]
+d_in = 128
+d = 128
+n_hidden_layers = 7
+n_cross_layers = 3
+hidden_dropout = 0.1
+cross_dropout = 0.1
+d_out = 128
+stacked = true
+d_embedding = 128
+
+
+[training]
+batch_size = 128
+eval_batch_size = 8192
+lr = 0.0001
+n_epochs = 200
+optimizer = "adamw"
+patience = 16
+weight_decay = 1e-5

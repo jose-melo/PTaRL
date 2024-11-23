@@ -382,6 +382,7 @@ if __name__ == "__main__":
     n_num_features, n_cat_features = info.get("n_num_features"), info.get(
         "n_cat_features"
     )
+    print(f"num features: {n_num_features}, cat features: {n_cat_features}")
 
     train_loader = build_data_loader(
         TensorDataset(

@@ -20,18 +20,37 @@ import pandas as pd
 from einops import rearrange, repeat
 from sklearn.decomposition import PCA
 import Models
+from src.models.dcnv2 import DCNv2, DCNv2Base
 
 
 class Model(nn.Module):
-    def __init__(self, input_num, model_type, out_dim, info, topic_num, cluster_centers_, config, task_type, categories) -> None:
+    def __init__(
+        self,
+        input_num,
+        model_type,
+        out_dim,
+        info,
+        topic_num,
+        cluster_centers_,
+        config,
+        task_type,
+        categories,
+    ) -> None:
         super().__init__()
 
-        self.input_num = input_num ## number of numerical features
+        self.input_num = input_num  ## number of numerical features
         self.out_dim = out_dim
         self.model_type = model_type
         self.info = info
-        self.num_list = np.arange(info.get('n_num_features'))
-        self.cat_list = np.arange(info.get('n_num_features'), info.get('n_num_features') + info.get('n_cat_features')) if info.get('n_cat_features')!=None else None
+        self.num_list = np.arange(info.get("n_num_features"))
+        self.cat_list = (
+            np.arange(
+                info.get("n_num_features"),
+                info.get("n_num_features") + info.get("n_cat_features"),
+            )
+            if info.get("n_cat_features") != None
+            else None
+        )
         self.topic_num = topic_num
         self.cluster_centers_ = cluster_centers_
         self.categories = categories
@@ -41,39 +60,101 @@ class Model(nn.Module):
 
         self.build_model()
 
-
-
     def build_model(self):
 
-        if self.model_type.split('_')[0] == 'MLP':
+        if self.model_type.split("_")[0] == "MLP":
             # construct parameter for centers
-            self.topic = nn.Parameter(torch.tensor(self.cluster_centers_), requires_grad=True)
+            self.topic = nn.Parameter(
+                torch.tensor(self.cluster_centers_), requires_grad=True
+            )
 
             self.weight_ = nn.Parameter(torch.tensor(0.5))
 
-            self.encoder = Models.mlp.MLP(self.input_num, self.config['model']['d_layers'], self.config['model']['dropout'], self.out_dim, self.categories, self.config['model']['d_embedding'])
+            self.encoder = Models.mlp.MLP(
+                self.input_num,
+                self.config["model"]["d_layers"],
+                self.config["model"]["dropout"],
+                self.out_dim,
+                self.categories,
+                self.config["model"]["d_embedding"],
+            )
 
-            self.head = nn.Linear(self.config['model']['d_layers'][-1], self.out_dim)
+            self.head = nn.Linear(self.config["model"]["d_layers"][-1], self.out_dim)
 
             self.reduce = nn.Sequential(
-                        nn.Linear(self.config['model']['d_layers'][-1], self.config['model']['d_layers'][-1]),
-                        nn.GELU(),
-                        nn.Dropout(0.1), 
-                        nn.Linear(self.config['model']['d_layers'][-1], self.config['model']['d_layers'][-1]),
-                        nn.GELU(),
-                        nn.Dropout(0.1),
-                        nn.Linear(self.config['model']['d_layers'][-1], self.config['model']['d_layers'][-1]),
-                        nn.GELU(),
-                        nn.Dropout(0.1),
-                        nn.Linear(self.config['model']['d_layers'][-1], self.topic_num)
-                    )
+                nn.Linear(
+                    self.config["model"]["d_layers"][-1],
+                    self.config["model"]["d_layers"][-1],
+                ),
+                nn.GELU(),
+                nn.Dropout(0.1),
+                nn.Linear(
+                    self.config["model"]["d_layers"][-1],
+                    self.config["model"]["d_layers"][-1],
+                ),
+                nn.GELU(),
+                nn.Dropout(0.1),
+                nn.Linear(
+                    self.config["model"]["d_layers"][-1],
+                    self.config["model"]["d_layers"][-1],
+                ),
+                nn.GELU(),
+                nn.Dropout(0.1),
+                nn.Linear(self.config["model"]["d_layers"][-1], self.topic_num),
+            )
+        elif self.model_type.split("_")[0] == "DCNv2":
+            self.topic = nn.Parameter(
+                torch.tensor(self.cluster_centers_), requires_grad=True
+            )
 
+            self.weight_ = nn.Parameter(torch.tensor(0.5))
+
+            self.encoder = DCNv2Base(
+                d_in=self.config["model"]["d_in"],
+                d=self.config["model"]["d"],
+                n_hidden_layers=self.config["model"]["n_hidden_layers"],
+                n_cross_layers=self.config["model"]["n_cross_layers"],
+                hidden_dropout=self.config["model"]["hidden_dropout"],
+                cross_dropout=self.config["model"]["cross_dropout"],
+                d_out=self.config["model"]["d_out"],
+                stacked=self.config["model"]["stacked"],
+                categories=self.config["model"].get("categories", None),
+                d_embedding=self.config["model"]["d_embedding"],
+            )
+
+            self.head = nn.Linear(self.config["model"]["d"], self.out_dim)
+
+            self.reduce = nn.Sequential(
+                nn.Linear(
+                    self.config["model"]["d"],
+                    self.config["model"]["d"],
+                ),
+                nn.GELU(),
+                nn.Dropout(0.1),
+                nn.Linear(
+                    self.config["model"]["d"],
+                    self.config["model"]["d"],
+                ),
+                nn.GELU(),
+                nn.Dropout(0.1),
+                nn.Linear(
+                    self.config["model"]["d"],
+                    self.config["model"]["d"],
+                ),
+                nn.GELU(),
+                nn.Dropout(0.1),
+                nn.Linear(self.config["model"]["d"], self.topic_num),
+            )
 
     def forward(self, inputs_n, inputs_c):
         inputs_ = self.encoder(inputs_n, inputs_c)
         r_ = self.reduce(inputs_)
-        if self.model_type.split('_')[1] == 'ot':
-            return self.head(inputs_), torch.softmax(r_, dim=1), inputs_, torch.sigmoid(self.weight_)+0.01
+        if self.model_type.split("_")[1] == "ot":
+            return (
+                self.head(inputs_),
+                torch.softmax(r_, dim=1),
+                inputs_,
+                torch.sigmoid(self.weight_) + 0.01,
+            )
         else:
             return self.head(inputs_)
-        
