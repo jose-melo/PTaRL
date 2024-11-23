@@ -335,7 +335,13 @@ if __name__ == "__main__":
     parser.add_argument("--diversity_weight", type=float, default=0.25)
     parser.add_argument("--r_weight", type=float, default=0.25)
     parser.add_argument("--prototype_initial", type=str, default="kmeans")
+    parser.add_argument("--random", type=bool, default=False)
     args = parser.parse_args()
+
+    if args.random:
+        random_seed = random.randint(0, 100000)
+        args.seed = random_seed
+        print(f"random seed: {random_seed}")
 
     _set_seed(args.seed)
 
@@ -454,6 +460,44 @@ if __name__ == "__main__":
             args.diversity_weight,
             args.r_weight,
         )
+        model = best_model
+        model.eval()
+
+        pred = []
+        ground = []
+        for bid, (X_n, X_c, y) in enumerate(test_loader):
+            model_pred = model(X_n, X_c)
+            if args.model_type.split("_")[1] == "ot":
+                pred.append(model(X_n, X_c).data.cpu().numpy())
+            else:
+                pred.append(model(X_n, X_c).data.cpu().numpy())
+            ground.append(y)
+        pred = np.concatenate(pred, axis=0)
+        y = torch.cat(ground, dim=0)
+
+        y = y.data.cpu().numpy()
+
+        if task_type == "binclass":
+            pred = np.round(scipy.special.expit(pred))
+            score = sklearn.metrics.accuracy_score(
+                y.reshape(-1, 1), pred.reshape(-1, 1)
+            )
+        elif task_type == "multiclass":
+            pred = pred.argmax(axis=1)
+            score = sklearn.metrics.accuracy_score(
+                y.reshape(-1, 1), pred.reshape(-1, 1)
+            )
+        else:
+            assert task_type == "regression"
+            score = (
+                sklearn.metrics.mean_squared_error(
+                    y.reshape(-1, 1), pred.reshape(-1, 1)
+                )
+                ** 0.5
+                * y_std
+            )
+
+        logger.info(f"test result original, {score}")
 
         cluster_centers_ = generate_topic(best_model, train_loader)
 

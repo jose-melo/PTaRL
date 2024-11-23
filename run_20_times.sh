@@ -14,6 +14,7 @@ DATANAME=$2
 for i in {1..20}
 do
     echo "Execution $i: Running train_final_version.py with model_type=$MODEL_TYPE and dataname=$DATANAME"
-    python train_final_version.py --model_type "$MODEL_TYPE" --dataname "$DATANAME"
+    python train_final_version.py --model_type "$MODEL_TYPE" --dataname "$DATANAME" --random True
+
 done
 
