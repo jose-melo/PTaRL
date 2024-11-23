@@ -22,7 +22,7 @@ from sklearn.decomposition import PCA
 import Models
 from src.models.autoint import AutoIntBase
 from src.models.dcnv2 import DCNv2, DCNv2Base
-from rtdl_revisiting_models import ResNet
+from rtdl_revisiting_models import ResNet, FTTransformer
 
 
 class Model(nn.Module):
@@ -257,6 +257,72 @@ class Model(nn.Module):
                 nn.GELU(),
                 nn.Dropout(0.1),
                 nn.Linear(self.config["model"]["d_token"], self.topic_num),
+            )
+        elif self.model_type.split("_")[0] == "fttransformer":
+            self.topic = nn.Parameter(
+                torch.tensor(self.cluster_centers_), requires_grad=True
+            )
+
+            self.weight_ = nn.Parameter(torch.tensor(0.5))
+
+            class EncoderWrapper(nn.Module):
+                def __init__(self, config):
+                    super(EncoderWrapper, self).__init__()
+                    self.config = config
+                    self.encoder = FTTransformer(
+                        n_cont_features=self.config["model"].get("n_cont_features", 0),
+                        cat_cardinalities=self.config["model"].get(
+                            "cat_cardinalities", None
+                        ),
+                        d_out=self.config["model"].get("d_out", 128),
+                        n_blocks=self.config["model"].get("n_blocks", 6),
+                        d_block=self.config["model"].get("d_block", 64),
+                        attention_n_heads=self.config["model"].get(
+                            "attention_n_heads", 4
+                        ),
+                        attention_dropout=self.config["model"].get(
+                            "attention_dropout", 0.1
+                        ),
+                        ffn_d_hidden=self.config["model"].get("ffn_d_hidden", None),
+                        ffn_d_hidden_multiplier=self.config["model"].get(
+                            "ffn_d_hidden_multiplier", 2
+                        ),
+                        ffn_dropout=self.config["model"].get("ffn_dropout", 0.1),
+                        residual_dropout=self.config["model"].get(
+                            "residual_dropout", 0.1
+                        ),
+                    )
+
+                def forward(self, x_num, x_cat):
+                    if not hasattr(self.config["model"], "cat_cardinalities"):
+                        x_cat = None
+
+                    return self.encoder(x_num, x_cat)
+
+            self.encoder = EncoderWrapper(self.config)
+
+            self.head = nn.Linear(self.config["model"]["d_block"], self.out_dim)
+
+            self.reduce = nn.Sequential(
+                nn.Linear(
+                    self.config["model"]["d_block"],
+                    self.config["model"]["d_block"],
+                ),
+                nn.GELU(),
+                nn.Dropout(0.1),
+                nn.Linear(
+                    self.config["model"]["d_block"],
+                    self.config["model"]["d_block"],
+                ),
+                nn.GELU(),
+                nn.Dropout(0.1),
+                nn.Linear(
+                    self.config["model"]["d_block"],
+                    self.config["model"]["d_block"],
+                ),
+                nn.GELU(),
+                nn.Dropout(0.1),
+                nn.Linear(self.config["model"]["d_block"], self.topic_num),
             )
 
     def forward(self, inputs_n, inputs_c):
