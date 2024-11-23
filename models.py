@@ -21,6 +21,7 @@ from einops import rearrange, repeat
 from sklearn.decomposition import PCA
 import Models
 from src.models.dcnv2 import DCNv2, DCNv2Base
+from rtdl_revisiting_models import ResNet
 
 
 class Model(nn.Module):
@@ -144,6 +145,65 @@ class Model(nn.Module):
                 nn.GELU(),
                 nn.Dropout(0.1),
                 nn.Linear(self.config["model"]["d"], self.topic_num),
+            )
+        elif self.model_type.split("_")[0] == "Resnet":
+            self.topic = nn.Parameter(
+                torch.tensor(self.cluster_centers_), requires_grad=True
+            )
+
+            self.weight_ = nn.Parameter(torch.tensor(0.5))
+
+            class PreprocessInput(nn.Module):
+                def __init__(self):
+                    super(PreprocessInput, self).__init__()
+
+                def forward(self, x_num, x_cat):
+                    return x_num
+
+            class EncoderWrapper(nn.Module):
+                def __init__(self, config):
+                    super(EncoderWrapper, self).__init__()
+                    self.preprocess = PreprocessInput()
+                    self.encoder = ResNet(
+                        d_in=config["model"]["d_in"],
+                        d_out=config["model"].get("d_out", None),
+                        n_blocks=config["model"]["n_blocks"],
+                        d_block=config["model"]["d_block"],
+                        d_hidden=config["model"].get("d_hidden", None),
+                        d_hidden_multiplier=config["model"].get(
+                            "d_hidden_multiplier", None
+                        ),
+                        dropout1=config["model"]["dropout1"],
+                        dropout2=config["model"]["dropout2"],
+                    )
+
+                def forward(self, x_num, x_cat):
+                    return self.encoder(x_num)
+
+            self.encoder = EncoderWrapper(self.config)
+
+            self.head = nn.Linear(self.config["model"]["d_hidden"], self.out_dim)
+
+            self.reduce = nn.Sequential(
+                nn.Linear(
+                    self.config["model"]["d_hidden"],
+                    self.config["model"]["d_hidden"],
+                ),
+                nn.GELU(),
+                nn.Dropout(0.1),
+                nn.Linear(
+                    self.config["model"]["d_hidden"],
+                    self.config["model"]["d_hidden"],
+                ),
+                nn.GELU(),
+                nn.Dropout(0.1),
+                nn.Linear(
+                    self.config["model"]["d_hidden"],
+                    self.config["model"]["d_hidden"],
+                ),
+                nn.GELU(),
+                nn.Dropout(0.1),
+                nn.Linear(self.config["model"]["d_hidden"], self.topic_num),
             )
 
     def forward(self, inputs_n, inputs_c):
