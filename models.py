@@ -20,6 +20,7 @@ import pandas as pd
 from einops import rearrange, repeat
 from sklearn.decomposition import PCA
 import Models
+from src.models.autoint import AutoIntBase
 from src.models.dcnv2 import DCNv2, DCNv2Base
 from rtdl_revisiting_models import ResNet
 
@@ -204,6 +205,58 @@ class Model(nn.Module):
                 nn.GELU(),
                 nn.Dropout(0.1),
                 nn.Linear(self.config["model"]["d_hidden"], self.topic_num),
+            )
+        elif self.model_type.split("_")[0] == "AutoInt":
+            self.topic = nn.Parameter(
+                torch.tensor(self.cluster_centers_), requires_grad=True
+            )
+
+            self.weight_ = nn.Parameter(torch.tensor(0.5))
+
+            self.encoder = AutoIntBase(
+                d_numerical=self.config["model"]["d_numerical"],
+                categories=self.config["model"].get(
+                    "categories", None
+                ),  # Optional parameter
+                n_layers=self.config["model"]["n_layers"],
+                d_token=self.config["model"]["d_token"],
+                n_heads=self.config["model"]["n_heads"],
+                attention_dropout=self.config["model"]["attention_dropout"],
+                residual_dropout=self.config["model"]["residual_dropout"],
+                activation=self.config["model"]["activation"],
+                prenormalization=self.config["model"]["prenormalization"],
+                initialization=self.config["model"]["initialization"],
+                kv_compression=self.config["model"].get(
+                    "kv_compression", None
+                ),  # Optional parameter
+                kv_compression_sharing=self.config["model"].get(
+                    "kv_compression_sharing"
+                ),  # Optional parameter
+                d_out=self.config["model"]["d_out"],
+            )
+
+            self.head = nn.Linear(self.config["model"]["d_token"], self.out_dim)
+
+            self.reduce = nn.Sequential(
+                nn.Linear(
+                    self.config["model"]["d_token"],
+                    self.config["model"]["d_token"],
+                ),
+                nn.GELU(),
+                nn.Dropout(0.1),
+                nn.Linear(
+                    self.config["model"]["d_token"],
+                    self.config["model"]["d_token"],
+                ),
+                nn.GELU(),
+                nn.Dropout(0.1),
+                nn.Linear(
+                    self.config["model"]["d_token"],
+                    self.config["model"]["d_token"],
+                ),
+                nn.GELU(),
+                nn.Dropout(0.1),
+                nn.Linear(self.config["model"]["d_token"], self.topic_num),
             )
 
     def forward(self, inputs_n, inputs_c):
